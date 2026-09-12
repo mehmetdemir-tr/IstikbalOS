@@ -120,7 +120,7 @@ __/\\\\\\\\\\\\\________________________________________________________________
 
 **BerkeOS** is a modern, DOS-inspired operating system developed entirely from scratch using Rust (`no_std`). It features a complete boot chain, monolithic kernel, custom filesystem, interactive shell, device drivers, and more — all built with zero budget using free AI tools.
 
-**İstikbâlOS is the first ever distribution of BerkeOS that helps to keep growing this community and OS Development movement.
+**İstikbâlOS** is the first ever distribution of BerkeOS that helps to keep growing this community and OS Development movement.
 <table>
 <tr>
 <td width="50%">
