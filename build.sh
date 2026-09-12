@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
-# BerkeOS — QEMU Launch Script
+# ============================================================
+#  BerkeOS — Build Script
+#  Custom x86_64 OS
+# ============================================================
+set -e
 
 GREEN='\033[0;32m'
 CYAN='\033[0;36m'
@@ -7,177 +11,160 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 BOLD='\033[1m'
 NC='\033[0m'
-TAB='\t'
 
-ISO="build/istikbalos.iso"
+log()  { echo -e "${GREEN}==>${NC} ${BOLD}$*${NC}"; }
+step() { echo -e "  ${CYAN}->${NC} $*"; }
+warn() { echo -e "  ${YELLOW}!!${NC} $*"; }
+err()  { echo -e "  ${RED}ERROR:${NC} $*"; exit 1; }
 
-NOGRAPHIC=false
-UEFI_MODE=false
-VNC_MODE=false
+echo ""
+echo -e "${GREEN}${BOLD}  ██████╗ ███████╗██████╗ ██╗  ██╗███████╗ ██████╗ ███████╗${NC}"
+echo -e "${GREEN}${BOLD}  ██╔══██╗██╔════╝██╔══██╗██║ ██╔╝██╔════╝██╔═══██╗██╔════╝${NC}"
+echo -e "${GREEN}${BOLD}  ██████╔╝█████╗  ██████╔╝█████╔╝ █████╗  ██║   ██║███████╗${NC}"
+echo -e "${GREEN}${BOLD}  ██╔══██╗██╔══╝  ██╔══██╗██╔═██╗ ██╔══╝  ██║   ██║╚════██║${NC}"
+echo -e "${GREEN}${BOLD}  ██████╔╝███████╗██║  ██║██║  ██╗███████╗╚██████╔╝███████║${NC}"
+echo -e "${GREEN}${BOLD}  ╚═════╝ ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚══════╝${NC}"
+echo ""
+log "IstikbalOS Build"
+echo ""
 
-helpdoc() {
-            echo -e "${CYAN}IstikbalOS QEMU Launch Script${NC}"
-            echo -e "Copyright (c) 2026 Berke Oruc et al."
-            echo -e "${TAB}Usage: $0 [-nuvh]"
-            echo -e ""
-            echo -e "Command Line Arguments:"
-            echo -e "${TAB}-n/--nographic/--headless"
-            echo -e "${TAB}${TAB}Launches QEMU without any graphic interface."
-            echo -e "${TAB}-u/--uefi"
-            echo -e "${TAB}${TAB}Launches QEMU using the OVMF firmware."
-            echo -e "${TAB}-v/--vnc"
-            echo -e "${TAB}${TAB}Launches a QEMU instance hosting a VNC server at :1 (port 5901)."
-            echo -e "${TAB}-h/--help"
-            echo -e "${TAB}${TAB}Shows this message."
-            echo -e ""
-            echo -e "If no arguments passed, the VM will launch using default settings (GUI, Legacy BIOS)"
+# ── Dependency check ──────────────────────────────────────────────────────────
+log "Checking dependencies..."
+need() {
+    command -v "$1" &>/dev/null || err "'$1' not found. Install: sudo pacman -S $2"
+    step "$1 ... OK"
 }
+need rustc        "rust"
+need nasm          "nasm"
+need grub-mkrescue "grub xorriso"
+need xorriso       "xorriso"
+need ld            "binutils"
 
-# BREAKING: -h is moved to help for convenience.
+# ── Rust toolchain ────────────────────────────────────────────────────────────
+step "Setting Rust toolchain to nightly..."
+rustup override set nightly 2>/dev/null || true
+step "Checking rust-src component..."
+rustup component add rust-src --toolchain nightly 2>/dev/null || true
+NIGHTLY_VER=$(rustup show active-toolchain 2>/dev/null | awk '{print $1}')
+step "Active toolchain: $NIGHTLY_VER"
 
-for arg in "$@"; do
-    case "$arg" in
-        -n|--nographic|--headless)
-            NOGRAPHIC=true
-            ;;
-        -u|--uefi)
-            UEFI_MODE=true
-            ;;
-        -v|--vnc)
-            VNC_MODE=true
-            ;;
-        -h|--help)
-            helpdoc
-            exit 0
-            ;;
-        *)
-            echo "Unknown option: $arg"
-            helpdoc
-            exit 1
-            ;;
-    esac
-done
+# ── Clean ─────────────────────────────────────────────────────────────────────
+log "Cleaning stale artifacts..."
+rm -rf build target
+step "Cleaned."
 
-if [ -f "/usr/share/qemu/ovmf-x86_64.bin" ] || [ -f "/usr/share/edk2/x64/OVMF.fd" ]; then
-    if [ "$UEFI_MODE" = false ]; then
-        UEFI_AUTO="auto"
-    else
-        UEFI_AUTO="uefi"
-    fi
-else
-    UEFI_AUTO="bios"
-fi
+# ── Directories ───────────────────────────────────────────────────────────────
+log "Preparing build directories..."
+mkdir -p build/isofiles/boot/grub
+step "build/ ... ready"
 
-[ -f "$ISO" ] || {
-    echo -e "${RED}ERROR:${NC} $ISO not found. Run ${YELLOW}./build.sh${NC} first."
-    exit 1
+# ── Step 1: Assemble boot shim ────────────────────────────────────────────────
+log "Assembling boot shim (boot.asm)..."
+nasm -f elf64 src/boot/boot.asm -o build/boot.o -w-all
+step "boot.o ... OK"
+
+# ── Step 2: Build Rust kernel as staticlib ────────────────────────────────────
+log "Building Rust kernel (staticlib)..."
+step "Target: x86_64-unknown-none (built-in bare-metal target)"
+step "Cargo produces libberkeos.a — no linking by Cargo"
+
+RUSTFLAGS="\
+  -C target-feature=-mmx,-sse,-sse2,-sse3,-ssse3,-sse4.1,-sse4.2,-avx,-avx2 \
+  -C relocation-model=static \
+  -C code-model=kernel \
+  -C no-redzone=yes \
+" \
+cargo +nightly build \
+    --release \
+    --lib \
+    --target x86_64-unknown-none \
+    -Z build-std=core,compiler_builtins \
+    -Z build-std-features=compiler-builtins-mem \
+    2>&1 | sed 's/^/    /'
+
+LIB="target/x86_64-unknown-none/release/libberkeos.a"
+[ -f "$LIB" ] || err "Static library not found at $LIB — check cargo output above."
+step "Static library: $LIB ... OK"
+
+# ── Step 3: Link ──────────────────────────────────────────────────────────────
+log "Linking boot.o + Rust static library..."
+ld \
+    -n \
+    --gc-sections \
+    -T linker.ld \
+    -o build/berkeos.bin \
+    build/boot.o \
+    --whole-archive "$LIB" --no-whole-archive \
+    2>&1 | grep -v "RWX" || true
+
+[ -f "build/berkeos.bin" ] || err "Link failed — berkeos.bin not produced."
+step "build/berkeos.bin ... OK"
+file build/berkeos.bin | grep -q "ELF" && step "ELF format: OK" || warn "Not ELF?"
+
+# ── Step 4: GRUB config (BIOS) ─────────────────────────────────────────────
+log "Writing GRUB config (Silent Boot)..."
+mkdir -p build/isofiles/boot/grub
+cat > build/isofiles/boot/grub/grub.cfg << 'GRUBEOF'
+# BerkeOS - Silent Boot
+set timeout=0
+set default=0
+
+menuentry "IstikbalOS" {
+    insmod all_video
+    insmod gfxterm
+    insmod multiboot2
+    set gfxpayload=1024x768x32
+    multiboot2 /boot/berkeos.bin
+    boot
 }
+GRUBEOF
+step "grub.cfg ... OK (Silent Boot)"
 
-command -v qemu-system-x86_64 &>/dev/null || {
-    echo -e "${RED}ERROR:${NC} qemu-system-x86_64 not found."
-    echo "Install the needed packages to run qemu-system-x86_64 with the mode you specified using your distribution's package manager."
-    exit 1
-}
+# ── Step 4b: EFI Boot files ───────────────────────────────────────────────
+log "Setting up EFI boot..."
+mkdir -p build/isofiles/efi64/EFI/BOOT
+mkdir -p build/isofiles/boot/grub/i386-pc
 
-if [ "$VNC_MODE" = true ]; then
-    echo ""
-    echo -e "${GREEN}${BOLD}==> IstikbalOS — Launching in QEMU using VNC at :1 (port 5901)${NC}"
-    echo -e "    ISO      : ${CYAN}$ISO${NC}"
-    echo -e "    Arch     : x86_64  |  RAM: 256 MiB  |  Boot: ${CYAN}$UEFI_AUTO${NC}"
-    echo -e "    Display  : ${CYAN}1024x768 32bpp pixel framebuffer${NC}"
-    echo -e "    Drives   : ${CYAN}Alpha (ide0) | Beta (ide1)${NC}"
-    echo ""
-    echo -e "    ${YELLOW}Connect to the VNC server using a VNC client (like Remmina) to control this VM.${NC}"
-    echo ""
-elif [ "$NOGRAPHIC" = false ]; then
-    echo ""
-    echo -e "${GREEN}${BOLD}==> IstikbalOS — Launching in QEMU${NC}"
-    echo -e "    ISO      : ${CYAN}$ISO${NC}"
-    echo -e "    Arch     : x86_64  |  RAM: 256 MiB  |  Boot: ${CYAN}$UEFI_AUTO${NC}"
-    echo -e "    Display  : ${CYAN}1024x768 32bpp pixel framebuffer${NC}"
-    echo -e "    Drives   : ${CYAN}Alpha (ide0) | Beta (ide1)${NC}"
-    echo -e "    Input    : ${CYAN}PS/2 Keyboard — click QEMU window to type${NC}"
-    echo ""
-    echo -e "    ${YELLOW}Click the QEMU window to capture keyboard input${NC}"
-    echo -e "    ${YELLOW}Press Ctrl+Alt+G to release mouse from QEMU${NC}"
-    echo ""
+cat > build/isofiles/efi64/shell.cfg << 'EFICFG'
+\EFI\BOOT\BOOTX64.EFI
+EFICFG
+
+cp build/berkeos.bin build/isofiles/boot/berkeos.bin
+
+# Create BIOS boot image using grub-mkimage
+step "Creating BIOS boot image..."
+grub-mkimage -O i386-pc -o build/isofiles/boot/grub/i386-pc/core.img biosdisk part_msdos part_gpt iso9660 normal search search_fs_file configfile loopback test cat echo ls reboot halt multiboot2 gfxterm font loadenv true minicmd 2>&1 | head -5 || true
+
+step "Creating bootable ISO..."
+xorriso \
+    -report_about WARNINGS \
+    -dev build/istikbalos.iso \
+    -volid "ISTIKBALOS" \
+    -joliet on \
+    -rockridge on \
+    -map "$(pwd)/build/isofiles" / \
+    -boot_image any bin_catalog \
+    -boot_image any system_area="build/isofiles/boot/grub/i386-pc/boot.img" \
+    -boot_image any emul_image="build/isofiles/boot/grub/i386-pc/core.img" \
+    -boot_image any mod_path_history= \
+    -append_partition 2 0xEF "$(pwd)/build/isofiles/efi64" \
+    -boot_image any efi_path=efi64 \
+    -boot_image any next \
+    -boot_image any efi_boot_part="--efi-boot-image" \
+    -close_offline \
+    2>&1 | head -15 || true
+
+if [ ! -f build/istikbalos.iso ] || [ ! -s build/istikbalos.iso ]; then
+    step "Fallback: grub-mkrescue with mtools..."
+    export MTOOLS_SKIP_CHECK=1 MTOOLS_FAT_COMPATIBILITY=1
+    grub-mkrescue -o build/istikbalos.iso build/isofiles 2>&1 | head -10 || true
 fi
 
-DISK1="build/istikbalos_disk.img"
-DISK2="build/istikbalos_disk2.img"
+[ -f "build/istikbalos.iso" ] || err "ISO not created."
+step "build/istikbalos.iso ... OK (BIOS + UEFI)"
 
-if [ ! -f "$DISK1" ]; then
-    [ "$NOGRAPHIC" = false ] && echo -e "  ${CYAN}->  Creating alpha disk...${NC}"
-    dd if=/dev/zero of="$DISK1" bs=1M count=128 2>/dev/null
-fi
-
-if [ ! -f "$DISK2" ]; then
-    [ "$NOGRAPHIC" = false ] && echo -e "  ${CYAN}->  Creating beta disk...${NC}"
-    dd if=/dev/zero of="$DISK2" bs=1M count=256 2>/dev/null
-fi
-
-# TIP: Using pflash device while using OVMF also handles edge cases.
-# NOTE: Distros ship OVMF in different folders. If licensing works, embedding the firmware in the repo is more practical.
-UEFI_BIOS=""
-UEFI_FORCE=""
-if [ -f "/usr/share/qemu/ovmf-x86_64.bin" ]; then
-    UEFI_BIOS="-bios /usr/share/qemu/ovmf-x86_64.bin"
-    if [ "$UEFI_MODE" = true ]; then
-        UEFI_FORCE="-bios /usr/share/qemu/ovmf-x86_64.bin"
-    fi
-elif [ -f "/usr/share/edk2/x64/OVMF.fd" ]; then
-    UEFI_BIOS="-bios /usr/share/edk2/x64/OVMF.fd"
-    if [ "$UEFI_MODE" = true ]; then
-        UEFI_FORCE="-bios /usr/share/edk2/x64/OVMF.fd"
-    fi
-fi
-
-BOOT_OPTS="-boot d"
-if [ "$UEFI_AUTO" = "bios" ]; then
-    BOOT_OPTS="-boot d"
-else
-    BOOT_OPTS="-boot order=c,menu=off"
-fi
-
-
-if [ "$VNC_MODE" = true ]; then
-    qemu-system-x86_64 \
-        -m            256M           \
-        -cdrom        "$ISO"         \
-        -drive        file="$DISK1",format=raw,if=ide,index=0,media=disk \
-        -drive        file="$DISK2",format=raw,if=ide,index=1,media=disk \
-        $BOOT_OPTS   \
-        -vga std                   \
-        -serial       none          \
-        -vnc :1                     \
-        $UEFI_FORCE                \
-        -D            build/qemu.log 
-elif [ "$NOGRAPHIC" = true ]; then
-    qemu-system-x86_64 \
-        -m            256M           \
-        -cdrom        "$ISO"         \
-        -drive        file="$DISK1",format=raw,if=ide,index=0,media=disk \
-        -drive        file="$DISK2",format=raw,if=ide,index=1,media=disk \
-        $BOOT_OPTS   \
-        -nographic                  \
-        -serial       none          \
-        $UEFI_FORCE                \
-        -D            build/qemu.log 
-else
-    qemu-system-x86_64 \
-        -m            256M           \
-        -cdrom        "$ISO"         \
-        -drive        file="$DISK1",format=raw,if=ide,index=0,media=disk \
-        -drive        file="$DISK2",format=raw,if=ide,index=1,media=disk \
-        $BOOT_OPTS   \
-        -vga          std            \
-        -serial       stdio           \
-        $UEFI_FORCE                \
-        -D            build/qemu.log 
-fi
-
-if [ "$NOGRAPHIC" = false ]; then
-    echo ""
-    echo -e "${GREEN}==> QEMU exited.${NC}"
-    echo -e "    Log: ${CYAN}build/qemu.log${NC}"
-fi
+echo ""
+echo -e "${GREEN}${BOLD}  ✓ Build complete!${NC}"
+echo -e "    ISO : ${CYAN}build/istikbalos.iso${NC}"
+echo -e "    Run : ${YELLOW}./run.sh${NC}"
+echo ""
