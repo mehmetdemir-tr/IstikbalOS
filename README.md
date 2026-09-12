@@ -13,7 +13,7 @@
 > **Please use the [Bros repository](https://github.com/BerkeOruc/bros) for all future development and contributions.**
 
 ---
-> Note for İstikbalOS Development; we will get the latest release of BROS when it's publicly shared with it's source code. This is the first  base of İstikbalOS.
+> Note for İstikbalOS Development; we will get the latest release of BROS when it's publicly released with it's source code. This is the first  base of İstikbalOS.
 
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
 <!--                          HERO BANNER SECTION                          -->
