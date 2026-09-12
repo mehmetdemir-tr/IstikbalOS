@@ -41,7 +41,7 @@ jobs:
           echo "Rust version: $(rustc --version)"
           echo "Cargo version: $(cargo --version)"
 
-      - name: Build BerkeOS
+      - name: Build IstikbalOS
         run: |
           source "$HOME/.cargo/env"
           chmod +x build.sh
@@ -50,13 +50,13 @@ jobs:
       - name: Verify ISO
         run: |
           ls -la build/
-          test -f build/berkeos.iso && ls -lh build/berkeos.iso
+          test -f build/istikbalos.iso && ls -lh build/istikbalos.iso
 
       - name: Upload ISO artifact
         uses: actions/upload-artifact@v4
         with:
-          name: berkeos-iso
-          path: build/berkeos.iso
+          name: istikbalos-iso
+          path: build/istikbalos.iso
           retention-days: 30
 
   test-bios:
@@ -70,7 +70,7 @@ jobs:
       - name: Download ISO
         uses: actions/download-artifact@v4
         with:
-          name: berkeos-iso
+          name: istikbalos-iso
           path: build
 
       - name: Install dependencies
@@ -79,16 +79,16 @@ jobs:
       - name: Create disk images
         run: |
           mkdir -p build
-          dd if=/dev/zero of=build/berkeos_disk.img bs=1M count=128 status=none
-          dd if=/dev/zero of=build/berkeos_disk2.img bs=1M count=256 status=none
+          dd if=/dev/zero of=build/istikbalos_disk.img bs=1M count=128 status=none
+          dd if=/dev/zero of=build/istikbalos_disk2.img bs=1M count=256 status=none
 
       - name: Boot test (BIOS)
         run: |
           timeout 60 qemu-system-x86_64 \
             -m 256M \
-            -cdrom build/berkeos.iso \
-            -drive file=build/berkeos_disk.img,format=raw,if=ide,index=0,media=disk \
-            -drive file=build/berkeos_disk2.img,format=raw,if=ide,index=1,media=disk \
+            -cdrom build/istikbalos.iso \
+            -drive file=build/istikbalos_disk.img,format=raw,if=ide,index=0,media=disk \
+            -drive file=build/istikbalos_disk2.img,format=raw,if=ide,index=1,media=disk \
             -boot d \
             -nographic \
             -serial file:build/serial.log \
@@ -120,7 +120,7 @@ jobs:
       - name: Download ISO
         uses: actions/download-artifact@v4
         with:
-          name: berkeos-iso
+          name: istikbalos-iso
           path: build
 
       - name: Install dependencies
@@ -129,8 +129,8 @@ jobs:
       - name: Create disk images
         run: |
           mkdir -p build
-          dd if=/dev/zero of=build/berkeos_disk.img bs=1M count=128 status=none
-          dd if=/dev/zero of=build/berkeos_disk2.img bs=1M count=256 status=none
+          dd if=/dev/zero of=build/istikbalos_disk.img bs=1M count=128 status=none
+          dd if=/dev/zero of=build/istikbalos_disk2.img bs=1M count=256 status=none
 
       - name: Find OVMF
         run: |
@@ -187,9 +187,9 @@ jobs:
         run: |
           timeout 60 qemu-system-x86_64 \
             -m 256M \
-            -cdrom build/berkeos.iso \
-            -drive file=build/berkeos_disk.img,format=raw,if=ide,index=0,media=disk \
-            -drive file=build/berkeos_disk2.img,format=raw,if=ide,index=1,media=disk \
+            -cdrom build/istikbalos.iso \
+            -drive file=build/istikbalos_disk.img,format=raw,if=ide,index=0,media=disk \
+            -drive file=build/istikbalos_disk2.img,format=raw,if=ide,index=1,media=disk \
             -boot order=c,menu=off \
             -nographic \
             -serial file:build/serial.log \
@@ -225,14 +225,14 @@ jobs:
       - name: Download ISO
         uses: actions/download-artifact@v4
         with:
-          name: berkeos-iso
+          name: istikbalos-iso
           path: build
 
       - name: Check for existing release
         id: check_release
         run: |
           # Check if release already exists
-          if gh release view v0.6.3 &>/dev/null; then
+          if gh release view v0.1 &>/dev/null; then
             echo "release_exists=true" >> $GITHUB_OUTPUT
           else
             echo "release_exists=false" >> $GITHUB_OUTPUT
@@ -242,33 +242,29 @@ jobs:
         if: steps.check_release.outputs.release_exists == 'false'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.6.3
-          name: BerkeOS v0.6.3
+          tag_name: v0.1
+          name: IstikbalOS v0.1
           body: |
-            ## BerkeOS v0.6.3 - Stabilization Release
+            ## IstikbalOS v0.1 - First Distribution Release
 
-            ### What's New
-            - Serial Port Driver - COM1 UART at 115200 8N1
-            - Logging Macros - kinfo!, kwarn!, kerr!, kdebug!
-            - Enhanced Panic Handler - Serial output + stack dump
-            - DriveRegistry - Refactored from 12 globals to single struct
-            - fsck Command - Filesystem validation tool
-            - CI/CD Pipeline - GitHub Actions with BIOS/UEFI tests
-            - Test Harness - Automated testing script
+            Based on BerkeOS v0.6.3.
 
-            ### Technical Details
-            - Build: ISO created with GRUB (BIOS + UEFI)
-            - Tests: BIOS boot passed | UEFI boot passed
-            - Artifact: berkeos.iso
+            ### Included
+            - berkesh shell with tasks and turkiye commands
+            - BerkeBex runtime (berun)
+            - BIOS + UEFI boot tested in CI
+
+            ### Artifact
+            - istikbalos.iso
           draft: false
           prerelease: false
-          files: build/berkeos.iso
+          files: build/istikbalos.iso
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload to existing release
         if: steps.check_release.outputs.release_exists == 'true'
         run: |
-          gh release upload v0.6.3 build/berkeos.iso --clobber
+          gh release upload v0.1 build/istikbalos.iso --clobber
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
