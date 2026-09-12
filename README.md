@@ -13,6 +13,7 @@
 > **Please use the [Bros repository](https://github.com/BerkeOruc/bros) for all future development and contributions.**
 
 ---
+> Note for İstikbalOS Development; we will get the latest release of BROS when it's publicly shared with it's source code. This is the first  base of İstikbalOS.
 
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
 <!--                          HERO BANNER SECTION                          -->
@@ -47,7 +48,7 @@
 <br/>
 
 <!-- Tagline -->
-> **🇹🇷 Built from scratch by a 16-year-old developer from Turkey**
+> **🇹🇷 The first BerkeOS Distribution ever**
 > 
 > *A modern, DOS-inspired operating system proving that with dedication and AI assistance, anyone can build an OS.*
 
@@ -119,6 +120,7 @@ __/\\\\\\\\\\\\\________________________________________________________________
 
 **BerkeOS** is a modern, DOS-inspired operating system developed entirely from scratch using Rust (`no_std`). It features a complete boot chain, monolithic kernel, custom filesystem, interactive shell, device drivers, and more — all built with zero budget using free AI tools.
 
+**İstikbâlOS is the first ever distribution of BerkeOS that helps to keep growing this community and OS Development movement.
 <table>
 <tr>
 <td width="50%">
@@ -133,7 +135,7 @@ __/\\\\\\\\\\\\\________________________________________________________________
 - 🎵 **Audio** — PC Speaker beep & melodies
 - ⏰ **Real-Time** — RTC clock integration
 - 🔒 **Memory Safe** — Rust's ownership model
-
+- 🧰 **Newest Tools"* – Comes with this distro!
 </td>
 <td width="50%">
 
@@ -149,6 +151,7 @@ __/\\\\\\\\\\\\\________________________________________________________________
 | 📏 Total Lines | ~14,288 |
 | 💰 Build Cost | **0 TL** |
 | 📅 Started | 2024 (developer age 14) |
+| 🐃 Side language? | C language for other tools |
 
 </td>
 </tr>
@@ -501,6 +504,7 @@ BerkeOS/
 | `sysinfo` | Full system information |
 | `neofetch` | System info display |
 | `uptime` | System uptime |
+| `tasks` | See tasks are active |
 
 ### Tools & Admin
 | Command | Description |
