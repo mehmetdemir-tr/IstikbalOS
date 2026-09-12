@@ -9,14 +9,14 @@ BOLD='\033[1m'
 NC='\033[0m'
 TAB='\t'
 
-ISO="build/berkeos.iso"
+ISO="build/istikbalos.iso"
 
 NOGRAPHIC=false
 UEFI_MODE=false
 VNC_MODE=false
 
 helpdoc() {
-            echo -e "${CYAN}BerkeOS QEMU Launch Script${NC}"
+            echo -e "${CYAN}IstikbalOS QEMU Launch Script${NC}"
             echo -e "Copyright (c) 2026 Berke Oruc et al."
             echo -e "${TAB}Usage: $0 [-nuvh]"
             echo -e ""
@@ -81,7 +81,7 @@ command -v qemu-system-x86_64 &>/dev/null || {
 
 if [ "$VNC_MODE" = true ]; then
     echo ""
-    echo -e "${GREEN}${BOLD}==> BerkeOS — Launching in QEMU using VNC at :1 (port 5901)${NC}"
+    echo -e "${GREEN}${BOLD}==> IstikbalOS — Launching in QEMU using VNC at :1 (port 5901)${NC}"
     echo -e "    ISO      : ${CYAN}$ISO${NC}"
     echo -e "    Arch     : x86_64  |  RAM: 256 MiB  |  Boot: ${CYAN}$UEFI_AUTO${NC}"
     echo -e "    Display  : ${CYAN}1024x768 32bpp pixel framebuffer${NC}"
@@ -91,7 +91,7 @@ if [ "$VNC_MODE" = true ]; then
     echo ""
 elif [ "$NOGRAPHIC" = false ]; then
     echo ""
-    echo -e "${GREEN}${BOLD}==> BerkeOS — Launching in QEMU${NC}"
+    echo -e "${GREEN}${BOLD}==> IstikbalOS — Launching in QEMU${NC}"
     echo -e "    ISO      : ${CYAN}$ISO${NC}"
     echo -e "    Arch     : x86_64  |  RAM: 256 MiB  |  Boot: ${CYAN}$UEFI_AUTO${NC}"
     echo -e "    Display  : ${CYAN}1024x768 32bpp pixel framebuffer${NC}"
@@ -103,8 +103,8 @@ elif [ "$NOGRAPHIC" = false ]; then
     echo ""
 fi
 
-DISK1="build/berkeos_disk.img"
-DISK2="build/berkeos_disk2.img"
+DISK1="build/istikbalos_disk.img"
+DISK2="build/istikbalos_disk2.img"
 
 if [ ! -f "$DISK1" ]; then
     [ "$NOGRAPHIC" = false ] && echo -e "  ${CYAN}->  Creating alpha disk...${NC}"
