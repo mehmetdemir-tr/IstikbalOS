@@ -894,6 +894,7 @@ impl Shell {
             b"echo" => {
                 self.push_line(arg_slice, LineColor::Normal);
             }
+	    b"tasks" => self.cmd_tasks(arg_slice, fs),
             b"about" => self.cmd_about(),
             b"version" | b"ver" => self.cmd_version(),
             b"uname" => self.cmd_uname(),
@@ -945,6 +946,7 @@ impl Shell {
             b"video" => self.cmd_video(arg_slice),
             b"doom" => self.cmd_doom(),
             b"berke" => self.cmd_berke(),
+            b"turkiye" => self.cmd_turkiye(fb),
             b"update" => self.cmd_update(),
             other => {
                 // Check if it's a drive switch: "Alpha:" etc.
@@ -1112,6 +1114,7 @@ impl Shell {
 
         self.println("  [UTILITIES]", LineColor::Gold);
         self.println("  calc <expr>   - calculator", LineColor::Normal);
+        self.println("  turkiye       - show Turkish flag", LineColor::Normal);
         self.println("  update        - show planned features", LineColor::Normal);
         self.empty_line();
     }
@@ -2976,6 +2979,7 @@ impl Shell {
         );
         self.empty_line();
         self.println("  Author   : Berke Oruc (Age 16)", LineColor::Gold);
+	self.println("  Distributor: Mehmet Uğur Demir (Age 15)", LineColor::Gold);
         self.println("  GitHub   : github.com/berkeoruc", LineColor::Info);
         self.println("  Language : Rust (no_std, bare metal)", LineColor::Normal);
         self.println("  Arch     : x86_64", LineColor::Normal);
@@ -2995,15 +2999,231 @@ impl Shell {
     }
 
     fn cmd_version(&mut self) {
-        self.println("  BerkeOS", LineColor::Success);
+        self.println("  IstikbalOS", LineColor::Success);
         self.println("  Rust  |  x86_64  |  no_std", LineColor::Info);
     }
 
     fn cmd_uname(&mut self) {
         self.println(
-            "  BerkeOS berkeos 0.6.1 x86_64 Rust-nightly no_std BerkeFS",
+            "  IstikbalOS (berkeos 0.6.3 based) x86_64 Rust-nightly no_std BerkeFS",
             LineColor::Normal,
         );
+    }
+    fn cmd_tasks(&mut self, _arg: &[u8], _fs: &mut BerkeFS) {
+        use crate::process::process::{ProcessState, MAX_PROCESSES};
+        use crate::process::scheduler::PTABLE;
+        self.empty_line();
+        self.println("  PID   Name                 State     Ticks", LineColor::Gold);
+        self.println("  --------------------------------------------", LineColor::Gold);
+        let ptable = PTABLE.lock();
+        for i in 0..MAX_PROCESSES {
+            let p = &ptable.procs[i];
+            if p.state == ProcessState::Empty {
+                continue;
+            }
+            let state_str: &[u8] = match p.state {
+                ProcessState::Ready => b"Ready",
+                ProcessState::Running => b"Running",
+                ProcessState::Blocked => b"Blocked",
+                ProcessState::Zombie => b"Zombie",
+                ProcessState::Empty => continue,
+            };
+            // u32 -> decimal (no format! in no_std)
+            let mut pid_buf = [0u8; 10];
+            let mut pid_len = 0;
+            let mut v = p.pid;
+            if v == 0 {
+                pid_buf[0] = b'0';
+                pid_len = 1;
+            } else {
+                let mut tmp = [0u8; 10];
+                let mut n = 0;
+                while v > 0 && n < 10 {
+                    tmp[n] = b'0' + (v % 10) as u8;
+                    v /= 10;
+                    n += 1;
+                }
+                while n > 0 {
+                    n -= 1;
+                    pid_buf[pid_len] = tmp[n];
+                    pid_len += 1;
+                }
+            }
+            let mut tick_buf = [0u8; 20];
+            let mut tick_len = 0;
+            let mut t = p.ticks;
+            if t == 0 {
+                tick_buf[0] = b'0';
+                tick_len = 1;
+            } else {
+                let mut tmp = [0u8; 20];
+                let mut n = 0;
+                while t > 0 && n < 20 {
+                    tmp[n] = b'0' + (t % 10) as u8;
+                    t /= 10;
+                    n += 1;
+                }
+                while n > 0 {
+                    n -= 1;
+                    tick_buf[tick_len] = tmp[n];
+                    tick_len += 1;
+                }
+            }
+            let mut line = [0u8; 80];
+            let mut li = 0;
+            line[li] = b' ';
+            li += 1;
+            line[li] = b' ';
+            li += 1;
+            for j in 0..pid_len {
+                if li < 78 {
+                    line[li] = pid_buf[j];
+                    li += 1;
+                }
+            }
+            while li < 8 {
+                line[li] = b' ';
+                li += 1;
+            }
+            let name = p.get_name();
+            let nl = name.len().min(22);
+            for j in 0..nl {
+                if li < 78 {
+                    line[li] = name[j];
+                    li += 1;
+                }
+            }
+            while li < 32 {
+                line[li] = b' ';
+                li += 1;
+            }
+            for &b in state_str {
+                if li < 78 {
+                    line[li] = b;
+                    li += 1;
+                }
+            }
+            while li < 42 {
+                line[li] = b' ';
+                li += 1;
+            }
+            for j in 0..tick_len {
+                if li < 78 {
+                    line[li] = tick_buf[j];
+                    li += 1;
+                }
+            }
+            self.push_line(&line[..li], LineColor::Normal);
+        }
+        self.empty_line();
+    }
+    fn disc(
+        fb: &mut Framebuffer,
+        cx: i32,
+        cy: i32,
+        r: i32,
+        color: Color,
+        max_w: usize,
+        max_h: usize,
+    ) {
+        let mut y = cy - r;
+        while y <= cy + r {
+            let mut x = cx - r;
+            while x <= cx + r {
+                let dx = x - cx;
+                let dy = y - cy;
+                if dx * dx + dy * dy <= r * r
+                    && x >= 0
+                    && y >= 0
+                    && (x as usize) < max_w
+                    && (y as usize) < max_h
+                {
+                    fb.put_pixel(x as usize, y as usize, color);
+                }
+                x += 1;
+            }
+            y += 1;
+        }
+    }
+
+    fn cmd_turkiye(&mut self, fb: &mut Framebuffer) {
+        let red = Color::rgb(0xE3, 0x0A, 0x17);
+        let white = col_white();
+        let fw = self.fb_w;
+        let fh = self.fb_h;
+        let w = (fw.saturating_sub(80)).min(fh.saturating_sub(190) * 3 / 2);
+        let h = w * 2 / 3;
+        let x0 = fw.saturating_sub(w) / 2;
+        let y0 = fh.saturating_sub(h) / 2;
+        fb.fill_rect(x0, y0, w, h, red);
+        let cy = y0 + h / 2;
+        let ccx = x0 + w * 348 / 1000;
+        Self::disc(fb, ccx as i32, cy as i32, (h / 4) as i32, white, fw, fh);
+        Self::disc(
+            fb,
+            (ccx + h * 63 / 1000) as i32,
+            cy as i32,
+            (h * 20 / 100) as i32,
+            red,
+            fw,
+            fh,
+        );
+        let star: [&str; 13] = [
+            ".............",
+            ".......#.....",
+            "#.....##.....",
+            ".##.###......",
+            "..######.....",
+            "...########..",
+            "...##########",
+            "...########..",
+            "..######.....",
+            ".##.###......",
+            "#.....##.....",
+            ".......#.....",
+            ".............",
+        ];
+        let k = (h / 90).max(1);
+        let sx = (x0 + w * 55 / 100) as i32 - 6 * k as i32;
+        let sy = cy as i32 - 6 * k as i32;
+        for (r, row) in star.iter().enumerate() {
+            for (c, ch) in row.bytes().enumerate() {
+                if ch == b'#' {
+                    let px = sx + c as i32 * k as i32;
+                    let py = sy + r as i32 * k as i32;
+                    if px >= 0 && py >= 0 {
+                        fb.fill_rect(px as usize, py as usize, k, k, white);
+                    }
+                }
+            }
+        }
+        let cap1 = "TURKIYE";
+        let cap2 = "press any key to return";
+        fb.draw_string(
+            x0 + w / 2 - cap1.len() * GW / 2,
+            y0 + h + 16,
+            cap1,
+            white,
+            col_bg(),
+        );
+        fb.draw_string(
+            x0 + w / 2 - cap2.len() * GW / 2,
+            y0 + h + 16 + GH,
+            cap2,
+            col_gray(),
+            col_bg(),
+        );
+        let mut kb = Keyboard::new();
+        loop {
+            match kb.poll() {
+                Key::None => unsafe {
+                    for _ in 0..5000usize {
+                        core::arch::asm!("pause");
+                    }
+                },
+                _ => break,
+            }
+        }
     }
 
     fn cmd_whoami(&mut self) {
@@ -3012,12 +3232,13 @@ impl Shell {
 
     fn cmd_sysinfo(&mut self) {
         self.empty_line();
-        self.println("  BerkeOS System Information", LineColor::Info);
+        self.println(" IstikbalOS System Information", LineColor::Info);
         self.println(
             "  ----------------------------------------",
             LineColor::Info,
         );
-        self.println("  OS       : BerkeOS v0.6.3", LineColor::Normal);
+        self.println("  OS       : IstikbalOS v0.1", LineColor::Normal);
+	self.println("  Kernel   : BerkeOS v0.6.3", LineColor::Normal);
         self.println("  Arch     : x86_64 bare metal", LineColor::Normal);
         self.println("  Language : Rust nightly (no_std)", LineColor::Normal);
         self.println("  Boot     : UEFI/BIOS", LineColor::Normal);
@@ -3031,7 +3252,8 @@ impl Shell {
             "  Memory   : 4 GiB mapped (2 MiB huge pages)",
             LineColor::Normal,
         );
-        self.println("  Author   : Berke Oruc, Age 16", LineColor::Gold);
+        self.println("  Author of Kernel   : Berke Oruc, Age 16", LineColor::Gold);
+	self.println(" Distrubitor of distro : Mehmet Uğur Demir, Age 15", LineColor::Gold);
     }
 
     fn cmd_phase(&mut self) {
@@ -3044,9 +3266,9 @@ impl Shell {
 
     fn cmd_neofetch(&mut self) {
         self.empty_line();
-        self.println("  berke@BerkeOS", LineColor::Success);
+        self.println("  istikbal@BerkeOS", LineColor::Success);
         self.println("  --------------------------------", LineColor::Normal);
-        self.println("  OS       : BerkeOS", LineColor::Info);
+        self.println("  OS       : IstikbalOS", LineColor::Info);
         self.println("  Kernel   : berkeos", LineColor::Normal);
         self.println("  Shell    : berkesh", LineColor::Normal);
         self.println("  Arch     : x86_64", LineColor::Normal);
